@@ -43,9 +43,7 @@ def main():
         rfile = s.makefile('r')
         wfile = s.makefile('w')
 
-        receive_thread = threading.Thread(target=receive_messages, args=(rfile,))
-        receive_thread.daemon = True
-        receive_thread.start()
+        threading.Thread(target=receive_messages, args=(rfile,), daemon=True).start()
 
         try:
             while True:
