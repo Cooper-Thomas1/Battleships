@@ -406,7 +406,11 @@ def run_two_player_game_online(player1_io, player2_io):
         send_board(p["w"], p["board"])
         send(p["w"], "Your turn. Enter coordinate to fire at (e.g., B5):")
 
-        guess = recv(p["r"])
+        guess = recv(p["r"]).strip()
+        if not guess:
+            send(p["w"], "No input received. Please enter a coordinate like B5.")
+            continue
+
         if guess.lower() == 'quit':
             send(p["w"], "You forfeited the game.")
             send(opponent["w"], "Opponent forfeited. You win!")
