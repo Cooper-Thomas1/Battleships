@@ -431,13 +431,15 @@ def run_two_player_game_online(player1_io, player2_io):
                 if p["board"].all_ships_sunk():
                     send(p["w"], f"Congratulations! You sank all ships in {moves[current]} moves.")
                     send(opponent["w"], "All your ships are sunk. You lose.")
-                    break
+                    break # Ends the game if all ships are sunk
             elif result == 'miss':
                 send(p["w"], "MISS!")
                 send(opponent["w"], f"{p['name']} missed.")
-                current = 1 - current  # Switch turns
             elif result == 'already_shot':
                 send(p["w"], "You've already fired at that location. Try again.")
+                continue # Lets the player try again
+
+            current = 1 - current  # Switches turns after each valid shot
         except ValueError as e:
             send(p["w"], f"Invalid input: {e}")
 
