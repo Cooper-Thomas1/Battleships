@@ -399,50 +399,54 @@ def run_two_player_game_online(player1_io, player2_io):
     current = 0  # Index of current player
     moves = [0, 0]  # Track moves per player
 
-    while True:
+    while True: # Outer loop: Manages the game flow
         p = players[current]
         opponent = players[1 - current]
 
+        send(p["w"], "It's your turn! Enter a coordinate to fire at (e.g., B5):")
+        send(opponent["w"], f"Waiting for {p['name']} to take their turn...")
+
         send_board(p["w"], p["board"])
-        send(p["w"], "Your turn. Enter coordinate to fire at (e.g., B5):")
 
-        guess = recv(p["r"]).strip()
-        if not guess:
-            send(p["w"], "No input received. Please enter a coordinate like B5.")
-            continue
+        while True: # Inner loop: Handles input and game logic
+            guess = recv(p["r"]).strip()
+            if not guess:
+                send(p["w"], "No input received. Please enter a coordinate like B5.")
+                continue
 
-        if guess.lower() == 'quit':
-            send(p["w"], "You forfeited the game.")
-            send(opponent["w"], "Opponent forfeited. You win!")
-            break
+            if guess.lower() == 'quit':
+                send(p["w"], "You forfeited the game.")
+                send(opponent["w"], "Opponent forfeited. You win!")
+                return
 
-        try:
-            row, col = parse_coordinate(guess)
-            result, sunk_name = p["board"].fire_at(row, col)
-            moves[current] += 1
+            try:
+                row, col = parse_coordinate(guess)
+                result, sunk_name = p["board"].fire_at(row, col)
+                moves[current] += 1
 
-            if result == 'hit':
-                if sunk_name:
-                    send(p["w"], f"HIT! You sank the {sunk_name}!")
-                    send(opponent["w"], f"{p['name']} sank your {sunk_name}!")
-                else:
-                    send(p["w"], "HIT!")
-                    send(opponent["w"], f"{p['name']} hit one of your ships!")
-                if p["board"].all_ships_sunk():
-                    send(p["w"], f"Congratulations! You sank all ships in {moves[current]} moves.")
-                    send(opponent["w"], "All your ships are sunk. You lose.")
-                    break # Ends the game if all ships are sunk
-            elif result == 'miss':
-                send(p["w"], "MISS!")
-                send(opponent["w"], f"{p['name']} missed.")
-            elif result == 'already_shot':
-                send(p["w"], "You've already fired at that location. Try again.")
-                continue # Lets the player try again
+                if result == 'hit':
+                    if sunk_name:
+                        send(p["w"], f"HIT! You sank the {sunk_name}!")
+                        send(opponent["w"], f"{p['name']} sank your {sunk_name}!")
+                    else:
+                        send(p["w"], "HIT!")
+                        send(opponent["w"], f"{p['name']} hit one of your ships!")
+                    if p["board"].all_ships_sunk():
+                        send(p["w"], f"Congratulations! You sank all ships in {moves[current]} moves.")
+                        send(opponent["w"], "All your ships are sunk. You lose.")
+                        return # Ends the game if all ships are sunk
+                elif result == 'miss':
+                    send(p["w"], "MISS!")
+                    send(opponent["w"], f"{p['name']} missed.")
+                elif result == 'already_shot':
+                    send(p["w"], "You've already fired at that location. Try again.")
+                    continue # Lets the player try again
 
-            current = 1 - current  # Switches turns after each valid shot
-        except ValueError as e:
-            send(p["w"], f"Invalid input: {e}")
-
+                break
+            except ValueError as e:
+                send(p["w"], f"Invalid input: {e}")
+        
+        current = 1 - current  # Switches turns after each valid shot
 
 
 if __name__ == "__main__":
