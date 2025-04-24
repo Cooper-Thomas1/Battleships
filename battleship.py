@@ -357,23 +357,18 @@ def run_single_player_game_online(rfile, wfile):
         except ValueError as e:
             send(f"Invalid input: {e}")
 
+def send(wfile, msg):
+    wfile.write(msg + '\n')
+    wfile.flush()
+
+def recv(rfile):
+    return rfile.readline().strip()
+
 def run_two_player_game_online(player1_io, player2_io):
     """
     Runs a turn-based Battleship game between two online players.
     Each player_io is a tuple of (rfile, wfile) file-like objects.
     """
-
-    rfile1, wfile1 = player1_io
-    rfile2, wfile2 = player2_io
-
-    board1 = Board(BOARD_SIZE)
-    board2 = Board(BOARD_SIZE)
-    board1.place_ships_randomly(SHIPS)
-    board2.place_ships_randomly(SHIPS)
-
-    def send(wfile, msg):
-        wfile.write(msg + '\n')
-        wfile.flush()
 
     def send_board(wfile, board):
         wfile.write("GRID\n")
@@ -385,8 +380,13 @@ def run_two_player_game_online(player1_io, player2_io):
         wfile.write('\n')
         wfile.flush()
 
-    def recv(rfile):
-        return rfile.readline().strip()
+    rfile1, wfile1 = player1_io
+    rfile2, wfile2 = player2_io
+
+    board1 = Board(BOARD_SIZE)
+    board2 = Board(BOARD_SIZE)
+    board1.place_ships_randomly(SHIPS)
+    board2.place_ships_randomly(SHIPS)
 
     players = [
         {"name": "Player 1", "r": rfile1, "w": wfile1, "board": board2}, # Fires at player 2’s board
@@ -417,6 +417,10 @@ def run_two_player_game_online(player1_io, player2_io):
             if guess.lower() == 'quit':
                 send(p["w"], "You forfeited the game.")
                 send(opponent["w"], "Opponent forfeited. You win!")
+                
+                # Send final boards to both players
+                send_board(p["w"], p["board"])
+                send_board(opponent["w"], opponent["board"])
                 return
 
             try:
@@ -434,6 +438,10 @@ def run_two_player_game_online(player1_io, player2_io):
                     if p["board"].all_ships_sunk():
                         send(p["w"], f"Congratulations! You sank all ships in {moves[current]} moves.")
                         send(opponent["w"], "All your ships are sunk. You lose.")
+
+                        # Send final boards to both players
+                        send_board(p["w"], p["board"])
+                        send_board(opponent["w"], opponent["board"])
                         return # Ends the game if all ships are sunk
                 elif result == 'miss':
                     send(p["w"], "MISS!")
