@@ -480,9 +480,7 @@ def run_two_player_game_online(player1_io, player2_io):
         
         current = 1 - current  # Switches turns after each valid shot
 
-
-if __name__ == "__main__":
-    # Optional: run this file as a script to test single-player mode
+def main():
     while True:
         run_single_player_game_locally()
         
@@ -491,3 +489,7 @@ if __name__ == "__main__":
             print("Thanks for playing!")
             break
 
+
+if __name__ == "__main__":
+    # Optional: run this file as a script to test single-player mode
+    main()
