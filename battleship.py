@@ -10,6 +10,7 @@ Contains core data structures and logic for Battleship, including:
 
 import random
 import threading
+import queue
 
 BOARD_SIZE = 10
 SHIPS = [
@@ -284,8 +285,8 @@ def run_single_player_game_locally():
         guess = timed_input("\nEnter coordinate to fire at (or 'quit'): ")
         
         if guess is None:
-            print("\n  >> Game Over! You took too long to respond.")
-            break # end game
+            print("\nGame Over! You took too long to respond.")
+            return # end game
         
         guess = guess.strip()
 
@@ -346,7 +347,7 @@ def run_single_player_game_online(rfile, wfile):
         return rfile.readline().strip()
 
     board = Board(BOARD_SIZE)
-    board.place_ships_randomly(SHIPS)
+    board.place_ships_randomly(SHIPS) 
 
     send("Welcome to Online Single-Player Battleship! Try to sink all the ships. Type 'quit' to exit.")
 
