@@ -9,6 +9,7 @@ Contains core data structures and logic for Battleship, including:
 """
 
 import random
+import threading
 
 BOARD_SIZE = 10
 SHIPS = [
@@ -18,7 +19,7 @@ SHIPS = [
     ("Submarine", 3),
     ("Destroyer", 2)
 ]
-
+TIMEOUT = 30 # seconds 
 
 class Board:
     """
@@ -252,6 +253,21 @@ def run_single_player_game_locally():
 
     Then the player tries to sink them by firing coordinates.
     """
+
+    def timed_input(prompt):
+        def get_input():
+            global user_input
+            user_input = input(prompt)
+
+        thread = threading.Thread(target=get_input, daemon=True)
+        thread.start()
+        thread.join(TIMEOUT)
+
+        if thread.is_alive():
+            return None # timout reached
+        else: 
+            return user_input
+
     board = Board(BOARD_SIZE)
 
     # Ask user how they'd like to place ships
@@ -265,7 +281,14 @@ def run_single_player_game_locally():
     moves = 0
     while True:
         board.print_display_grid()
-        guess = input("\nEnter coordinate to fire at (or 'quit'): ").strip()
+        guess = timed_input("\nEnter coordinate to fire at (or 'quit'): ")
+        
+        if guess is None:
+            print("\n  >> Game Over! You took too long to respond.")
+            break # end game
+        
+        guess = guess.strip()
+
         if guess.lower() == 'quit':
             print("Thanks for playing. Exiting...")
             return
