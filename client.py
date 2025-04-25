@@ -34,9 +34,14 @@ def receive_messages(rfile):
             else:
                 # Normal message
                 print(line)
+
     except Exception as e:
         print(f"[ERROR] An error occurred in the receive thread: {e}")
 
+
+'''
+TODO:: close socked when you exit the game by quiting the game 
+''' 
 def main():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
