@@ -393,6 +393,23 @@ def run_two_player_game_online(player1_io, player2_io):
     Runs a turn-based Battleship game between two online players.
     Each player_io is a tuple of (rfile, wfile) file-like objects.
     """
+    def timed_input(rfile, timeout=TIMEOUT):
+        result = {}
+
+        def worker():
+            try:
+                result['data'] = rfile.readline().strip()
+            except Exception:
+                result['data'] = None
+
+        thread = threading.Thread(target=worker, daemon=True)
+        thread.start()
+        thread.join(timeout)
+
+        if thread.is_alive():
+            return None # timeout reaches
+        else:
+            return result.get('data', None)
 
     def send_board(wfile, board):
         wfile.write("GRID\n")
@@ -433,14 +450,20 @@ def run_two_player_game_online(player1_io, player2_io):
         send_board(p["w"], p["board"])
 
         while True: # Inner loop: Handles input and game logic
-            guess = recv(p["r"]).strip()
+            guess = timed_input(p["r"])
+
+            if guess is None:
+                send(p["w"], "Time's up! You took too long to respond.\n")
+                send(opponent["w"], f"{p['name']} took too long.\n")
+                break  # forfeit turn
+            
             if not guess:
                 send(p["w"], "No input received. Please enter a coordinate like B5.")
                 continue
 
             if guess.lower() == 'quit':
-                send(p["w"], "You forfeited the game.")
-                send(opponent["w"], "Opponent forfeited. You win!")
+                send(p["w"], "\nYou forfeited the game.")
+                send(opponent["w"], "\nOpponent forfeited. You win!")
                 
                 # Send final boards to both players
                 send_board(p["w"], p["board"])
