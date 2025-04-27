@@ -13,12 +13,13 @@ import threading
 HOST = '127.0.0.1'
 PORT = 5000
 
-def receive_messages(rfile):
+def receive_messages(rfile, socket_obj, stop_event):
     try:
-        while True:
+        while not stop_event.is_set():
             line = rfile.readline()
             if not line:
                 print("[INFO] Server disconnected.")
+                stop_event.set()
                 break
 
             line = line.strip()
@@ -38,29 +39,35 @@ def receive_messages(rfile):
     except Exception as e:
         print(f"[ERROR] An error occurred in the receive thread: {e}")
 
+    finally:
+        socket_obj.close()
 
-'''
-TODO:: close socked when you exit the game by quiting the game 
-''' 
+def handle_user_input(wfile, stop_event):
+    try:
+        while not stop_event.is_set():
+            user_input = input(">> ")
+            if stop_event.is_set():  # Exit if the server disconnects
+                break
+            wfile.write(user_input + '\n')
+            wfile.flush()
+    except Exception as e:
+        print(f"[ERROR] An error occurred in the input thread: {e}")
+
 def main():
+    stop_event = threading.Event()  # Create a stop event to coordinate threads
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((HOST, PORT))
         rfile = s.makefile('r')
         wfile = s.makefile('w')
 
-        threading.Thread(target=receive_messages, args=(rfile,), daemon=True).start()
+        threading.Thread(target=receive_messages, args=(rfile, s, stop_event), daemon=True).start()
 
-        try:
-            while True:
-                user_input = input(">> ")
-                wfile.write(user_input + '\n')
-                wfile.flush()
+        threading.Thread(target=handle_user_input, args=(wfile, stop_event), daemon=True).start()
 
-        except KeyboardInterrupt:
-            print("\n[INFO] Exiting...")
+        stop_event.wait()
 
-        finally:
-            s.close()
+        print("[INFO] Exiting...")
 
 if __name__ == "__main__":
     main()
