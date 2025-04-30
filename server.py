@@ -5,59 +5,103 @@ import threading
 HOST = '127.0.0.1'
 PORT = 5000
 
+lobby = []  # List to hold players waiting for a game
+lobby_lock = threading.Lock()  # Ensure only one thread accesses the lobby at a time
+game_lock = threading.Lock()  # Ensure only one active game at a time
+
 def handle_clients(player1, player2):
     """
     Handles the game between two connected players.
-    Each player is a tuple of (conn, rfile, wfile).
-
-    Modified to handle repeat games
+    Ends the game if a client disconnects.
     """
-    print("[INFO] Starting two-player game...")
+    with game_lock:  # aquire lock to ensure one game at a time
+        print("[INFO] Starting two-player game...")
 
-    # Extract readable/writable file objects
-    rfile1, wfile1 = player1[1], player1[2]
-    rfile2, wfile2 = player2[1], player2[2]
+        conn1, rfile1, wfile1 = player1
+        conn2, rfile2, wfile2 = player2
 
-    while True:
-        run_two_player_game_online((rfile1, wfile1), (rfile2, wfile2))
+        try:
+            while True:
+                run_two_player_game_online((rfile1, wfile1), (rfile2, wfile2))
 
-        # Ask if they want to play again
-        send(wfile1, "[INFO] Game over. Do you want to play again? (yes/no)")
-        send(wfile2, "[INFO] Game over. Do you want to play again? (yes/no)")
+                send(wfile1, "[INFO] Game over. Do you want to play again? (yes/no)")
+                send(wfile2, "[INFO] Game over. Do you want to play again? (yes/no)")
 
-        response1 = recv(rfile1).strip().lower()
-        response2 = recv(rfile2).strip().lower()
+                response1 = recv(rfile1).strip().lower()
+                response2 = recv(rfile2).strip().lower()
 
-        if response1 != "yes" or response2 != "yes":
-            send(wfile1, "[INFO] Game ended. Thanks for playing!")
-            send(wfile2, "[INFO] Game ended. Thanks for playing!")
+                if response1 != "yes" or response2 != "yes":
+                    send(wfile1, "[INFO] Game ended. Thanks for playing!")
+                    send(wfile2, "[INFO] Game ended. Thanks for playing!")
+                    break
 
-            player1[0].close()
-            player2[0].close()
+        except (ConnectionResetError, BrokenPipeError, OSError):
+            print("[WARNING] A player disconnected unexpectedly. Ending game.")
+            try:
+                send(wfile1, "[ERROR] Opponent disconnected. Game over.")
+            except:
+                pass
+            try:
+                send(wfile2, "[ERROR] Opponent disconnected. Game over.")
+            except:
+                pass
 
-            print("[INFO] Players disconnected.")
-            break
+        finally:
+            # Always clean up sockets and files
+            for conn, rfile, wfile in [player1, player2]:
+                try: rfile.close()
+                except: pass
+                try: wfile.close()
+                except: pass
+                try: conn.close()
+                except: pass
+            print("[INFO] Game session closed.") # current game ends, but server continues to run
+        
+        # release lock automatically (to let a new game start)
 
+    # try launching next game if enough players are waiting
+    launch_game_if_ready()
+
+
+def lobby_manager(conn, addr):
+    """
+    Manages lobby for players waiting to join a game. 
+    """
+    print(f"[INFO] New client connected from {addr}")
+    rfile = conn.makefile('r')
+    wfile = conn.makefile('w')
+
+    with lobby_lock: 
+        lobby.append((conn, rfile, wfile))
+        send(wfile, "[INFO] You are in the lobby")
+
+    # Try to start a new game if possible
+    launch_game_if_ready()
+
+def launch_game_if_ready():
+    with lobby_lock:
+        if len(lobby) >= 2 and not game_lock.locked():
+            player1 = lobby.pop(0)
+            player2 = lobby.pop(0)
+            threading.Thread(target=handle_clients, args=(player1, player2), daemon=True).start()
+            
 def main():
     """
-    Accepts exactly two clients, then starts the game.
+    Continuously accepts clients and assigns them into games.
     """
     print(f"[INFO] Server listening on {HOST}:{PORT}")
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind((HOST, PORT))
-        s.listen(2)
+        s.listen() # continuously listen for new connections (rm backlog=2)
 
-        players = []
-
-        while len(players) < 2:
-            conn, addr = s.accept()
-            print(f"[INFO] Player {len(players) + 1} connected from {addr}")
-            rfile = conn.makefile('r')
-            wfile = conn.makefile('w')
-            players.append((conn, rfile, wfile))
-
-        # Start game in a separate thread (optional, makes future expansion easier)
-        threading.Thread(target=handle_clients, args=(players[0], players[1])).start()
+        while True:
+            try:
+                conn, addr = s.accept()
+                threading.Thread(target=lobby_manager, args=(conn, addr), daemon=True).start()
+            except KeyboardInterrupt:
+                print("\n[INFO] Server shutting down.")
+                break
 
 if __name__ == "__main__":
     main()
