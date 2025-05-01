@@ -6,6 +6,7 @@ HOST = '127.0.0.1'
 PORT = 5000
 
 lobby = []  # List to hold players waiting for a game
+spectators = [] # List to hold spectators
 lobby_lock = threading.Lock()  # Ensure only one thread accesses the lobby at a time
 game_lock = threading.Lock()  # Ensure only one active game at a time
 
@@ -22,7 +23,7 @@ def handle_clients(player1, player2):
 
         try:
             while True:
-                run_two_player_game_online((rfile1, wfile1), (rfile2, wfile2))
+                run_two_player_game_online((rfile1, wfile1), (rfile2, wfile2), broadcast_to_spectators)
 
                 send(wfile1, "[INFO] Game over. Do you want to play again? (yes/no)")
                 send(wfile2, "[INFO] Game over. Do you want to play again? (yes/no)")
@@ -63,6 +64,19 @@ def handle_clients(player1, player2):
     launch_game_if_ready()
 
 
+def broadcast_to_spectators(game_state):
+    """
+    Sends the current game state to all connected spectators.
+    """
+    with lobby_lock:
+        for conn, rfile, wfile in spectators:
+            try:
+                send(wfile, f"[SPECTATOR] Game state update:\n{game_state}")
+            except:
+                # Remove disconnected spectators
+                spectators.remove((conn, rfile, wfile))
+
+
 def lobby_manager(conn, addr):
     """
     Manages lobby for players waiting to join a game. 
@@ -72,8 +86,13 @@ def lobby_manager(conn, addr):
     wfile = conn.makefile('w')
 
     with lobby_lock: 
-        lobby.append((conn, rfile, wfile))
-        send(wfile, "[INFO] You are in the lobby")
+        if len(lobby) < 2 and not game_lock.locked():
+            lobby.append((conn, rfile, wfile))
+            send(wfile, "[INFO] You are in the lobby")
+
+        else:
+            spectators.append((conn, rfile, wfile))
+            send(wfile, "[INFO] Lobby is full. You are now a spectator.")
 
     # Try to start a new game if possible
     launch_game_if_ready()

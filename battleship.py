@@ -388,7 +388,7 @@ def send(wfile, msg):
 def recv(rfile):
     return rfile.readline().strip()
 
-def run_two_player_game_online(player1_io, player2_io):
+def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
     """
     Runs a turn-based Battleship game between two online players.
     Each player_io is a tuple of (rfile, wfile) file-like objects.
@@ -421,6 +421,21 @@ def run_two_player_game_online(player1_io, player2_io):
         wfile.write('\n')
         wfile.flush()
 
+    def broadcast_game_state_to_spectators(players):
+        """
+        Broadcast the current game state to all spectators.
+        """
+        game_state = []
+        for p in players:
+            board_state = f"{p['name']}'s Board:\n"
+            board_state += "  " + " ".join(str(i + 1).rjust(2) for i in range(p["board"].size)) + '\n'
+            for r in range(p["board"].size):
+                row_label = chr(ord('A') + r)
+                row_str = " ".join(p["board"].display_grid[r][c] for c in range(p["board"].size))
+                board_state += f"{row_label:2} {row_str}\n"
+            game_state.append(board_state)
+        broadcast_callback("\n\n".join(game_state))
+
     rfile1, wfile1 = player1_io
     rfile2, wfile2 = player2_io
 
@@ -449,6 +464,9 @@ def run_two_player_game_online(player1_io, player2_io):
 
         send_board(p["w"], p["board"])
 
+        # Broadcast the current game state to spectators
+        broadcast_game_state_to_spectators(players)
+
         while True: # Inner loop: Handles input and game logic
             guess = timed_input(p["r"])
 
@@ -468,6 +486,9 @@ def run_two_player_game_online(player1_io, player2_io):
                 # Send final boards to both players
                 send_board(p["w"], p["board"])
                 send_board(opponent["w"], opponent["board"])
+
+                # Broadcast final game state to spectators
+                broadcast_game_state_to_spectators(players)
                 return
 
             try:
@@ -489,6 +510,9 @@ def run_two_player_game_online(player1_io, player2_io):
                         # Send final boards to both players
                         send_board(p["w"], p["board"])
                         send_board(opponent["w"], opponent["board"])
+
+                        # Broadcast final game state to spectators
+                        broadcast_game_state_to_spectators(players)
                         return # Ends the game if all ships are sunk
                 elif result == 'miss':
                     send(p["w"], "MISS!")
