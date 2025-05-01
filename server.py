@@ -77,6 +77,19 @@ def broadcast_to_spectators(game_state):
                 spectators.remove((conn, rfile, wfile))
 
 
+def handle_spectator_input(rfile, wfile):
+    """
+    Handles input from spectators. Any input is ignored or produces an error message.
+    """
+    try:
+        while True:
+            command = rfile.readline().strip()
+            if command:
+                send(wfile, "[ERROR] Spectators cannot issue commands.")
+    except Exception:
+        pass
+
+
 def lobby_manager(conn, addr):
     """
     Manages lobby for players waiting to join a game. 
@@ -93,6 +106,9 @@ def lobby_manager(conn, addr):
         else:
             spectators.append((conn, rfile, wfile))
             send(wfile, "[INFO] Lobby is full. You are now a spectator.")
+
+            # Start a thread to handle spectator input (ignored or produces an error)
+            threading.Thread(target=handle_spectator_input, args=(rfile, wfile), daemon=True).start()
 
     # Try to start a new game if possible
     launch_game_if_ready()
