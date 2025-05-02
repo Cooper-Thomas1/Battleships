@@ -11,6 +11,12 @@ run ```python3 battleship.py```
 To play an online two player battleship game using our code:    
 run ```python3 server.py``` in one terminal, open another terminal and run ```python3 client.py``` and then open a third terminal and run ```python3 client.py```.
 
+## Possible battleship inspo
+https://github.com/Klavionik/battleship-tui/blob/main/battleship/server/auth.py
+https://github.com/ronmelcuba10/python-online-multiplayer-battleship/blob/master/server.py
+https://github.com/harshsodi/battleship/blob/master/server.py
+https://github.com/jvillegasd/battleship-go/blob/master/networking/server.py
+
 ## Directory Structure
 ```
 BEER/
