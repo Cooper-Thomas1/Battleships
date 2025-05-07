@@ -388,6 +388,34 @@ def send(wfile, msg):
 def recv(rfile):
     return rfile.readline().strip()
 
+def save_game_state(player1_id, player2_id, game_data):
+    """
+    Save the game state (e.g., to a file, database, etc.).
+    You can customize this function to save the game in whatever format you like.
+    """
+    with open("game_state.txt", "w") as f:
+        f.write(f"Player 1: {player1_id}\n")
+        f.write(f"Player 2: {player2_id}\n")
+        f.write(f"Turn: {game_data['turn']}\n")
+        f.write(f"Moves: {game_data['moves']}\n")
+        f.write("Player 1's Board:\n")
+        for row in game_data['board1'].display_grid:
+            f.write(" ".join(row) + "\n")
+        f.write("Player 2's Board:\n")
+        for row in game_data['board2'].display_grid:
+            f.write(" ".join(row) + "\n")
+    print("Game state saved.")
+
+def send_board(wfile, board):
+    wfile.write("GRID\n")
+    wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
+    for r in range(board.size):
+        row_label = chr(ord('A') + r)
+        row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
+        wfile.write(f"{row_label:2} {row_str}\n")
+    wfile.write('\n')
+    wfile.flush()
+
 def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
     """
     Runs a turn-based Battleship game between two online players.
@@ -410,16 +438,6 @@ def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
             return None # timeout reaches
         else:
             return result.get('data', None)
-
-    def send_board(wfile, board):
-        wfile.write("GRID\n")
-        wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
-        for r in range(board.size):
-            row_label = chr(ord('A') + r)
-            row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
-            wfile.write(f"{row_label:2} {row_str}\n")
-        wfile.write('\n')
-        wfile.flush()
 
     def broadcast_game_state_to_spectators(players, message):
         """
@@ -490,6 +508,15 @@ def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
                 send_board(opponent["w"], opponent["board"])
 
                 broadcast_game_state_to_spectators(players, "Game over. A player forfeited.")
+
+                game_data = {
+                    'board1': p["board"],  # Player 1's board
+                    'board2': opponent["board"],  # Player 2's board
+                    'turn': current,  # Current player turn
+                    'moves': moves  # Moves count
+                }
+                save_game_state(player1_id="player1", player2_id="player2", game_data=game_data)
+
                 return
 
             try:
@@ -518,6 +545,15 @@ def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
                         send_board(opponent["w"], opponent["board"])
 
                         broadcast_game_state_to_spectators(players, "Game over. All ships have been sunk!")
+                        
+                        game_data = {
+                            'board1': p["board"],  # Player 1's board
+                            'board2': opponent["board"],  # Player 2's board
+                            'turn': current,  # Current player turn
+                            'moves': moves  # Moves count
+                        }
+                        save_game_state(player1_id="player1", player2_id="player2", game_data=game_data)
+
                         return # Ends the game if all ships are sunk
                     
                 elif result == 'miss':

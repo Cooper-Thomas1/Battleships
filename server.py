@@ -1,14 +1,62 @@
 import socket
-from battleship import run_two_player_game_online, send, recv
+from battleship import run_two_player_game_online, send, recv, save_game_state, send_board
 import threading
+import time
+import uuid
 
 HOST = '127.0.0.1'
 PORT = 5000
+RECONNECT_TIMEOUT = 60  # 60 seconds for reconnection window
 
 lobby = []  # List to hold players waiting for a game
 spectators = [] # List to hold spectators
+active_players = {}  # Dictionary to store active players' details (ID, username, still_active)
+game_states = {}
 lobby_lock = threading.Lock()  # Ensure only one thread accesses the lobby at a time
 game_lock = threading.Lock()  # Ensure only one active game at a time
+
+def handle_reconnection(conn, rfile, wfile, player_id, username):
+    """
+    Allows a player to reconnect to their previous game if it exists and they are still within the reconnection window.
+    """
+    with lobby_lock:
+        player = active_players.get(player_id)
+        if player and not player['still_active']:
+            last_disconnect_time = player['disconnect_time']
+            if time.time() - last_disconnect_time <= RECONNECT_TIMEOUT:
+                # Player is eligible to reconnect
+                active_players[player_id]['still_active'] = True
+                
+                # Check if there's a saved game state for this player
+                game_state = game_states.get(player_id)
+                if game_state:
+                    send(wfile, "[INFO] Reconnection successful. Resuming your previous game.")
+                    # Load the saved game state
+                    # Set the boards and turn info
+                    board1 = game_state['board1']
+                    board2 = game_state['board2']
+                    current_turn = game_state['turn']
+                    send_board(wfile, board1)  # Send the board to the reconnecting player
+                    send_board(wfile, board2)
+
+                    send(wfile, f"[INFO] It's your turn, {username}. Game resumed.")
+
+                    # Update the game state to resume the flow
+                    game_state['turn'] = current_turn
+                    game_states[player_id] = game_state  # Save back the updated game state
+                    
+                    # Return and resume the game with the loaded state
+                    return True
+                else:
+                    send(wfile, "[INFO] No game state found. Starting a new game.")
+    return False
+
+def save_game_state(player1_id, player2_id, game_data):
+    """
+    Saves the game state for a match (e.g., game boards, turn information).
+    """
+    game_states[player1_id] = game_data
+    game_states[player2_id] = game_data
 
 def handle_clients(player1, player2):
     """
@@ -18,8 +66,26 @@ def handle_clients(player1, player2):
     with game_lock:  # aquire lock to ensure one game at a time
         print("[INFO] Starting two-player game...")
 
-        conn1, rfile1, wfile1 = player1
-        conn2, rfile2, wfile2 = player2
+        conn1, rfile1, wfile1, player1_id, username1 = player1
+        conn2, rfile2, wfile2, player2_id, username2 = player2
+
+        active_players[player1_id] = {'username': username1, 'still_active': True, 'disconnect_time': None}
+        active_players[player2_id] = {'username': username2, 'still_active': True, 'disconnect_time': None}
+
+        game_data = {
+            'board1': None,  # Placeholder for player 1's board
+            'board2': None,  # Placeholder for player 2's board
+            'turn': 1,  # Assume player 1 starts
+        }
+
+        if handle_reconnection(conn1, rfile1, wfile1, player1_id, username1):
+            return  # Player 1 reconnected and resumed their game
+
+        if handle_reconnection(conn2, rfile2, wfile2, player2_id, username2):
+            return  # Player 2 reconnected and resumed their game 
+        
+        # Save the initial game state
+        save_game_state(player1_id, player2_id, game_data)
 
         try:
             while True:
@@ -38,6 +104,24 @@ def handle_clients(player1, player2):
 
         except (ConnectionResetError, BrokenPipeError, OSError):
             print("[WARNING] A player disconnected unexpectedly. Ending game.")
+
+            # Mark the disconnected player as inactive
+            active_players[player1_id]['still_active'] = False
+            active_players[player2_id]['still_active'] = True
+
+            disconnect_time = time.time()
+            active_players[player1_id]['disconnect_time'] = disconnect_time
+            active_players[player2_id]['disconnect_time'] = None
+
+            time.sleep(RECONNECT_TIMEOUT)
+
+            if not active_players[player1_id]['still_active']:
+                send(wfile2, "[INFO] Player1 didn't reconnect in time. You win!")
+                send(wfile1, "[INFO] You lost the game as your opponent did not reconnect in time.")
+            
+            send(wfile1, "[INFO] Game over.")
+            send(wfile2, "[INFO] Game over.")
+
             try:
                 send(wfile1, "[ERROR] Opponent disconnected. Game over.")
             except:
@@ -49,7 +133,7 @@ def handle_clients(player1, player2):
 
         finally:
             # Always clean up sockets and files
-            for conn, rfile, wfile in [player1, player2]:
+            for conn, rfile, wfile, player_id, _ in [player1, player2]:
                 try: rfile.close()
                 except: pass
                 try: wfile.close()
@@ -98,17 +182,30 @@ def lobby_manager(conn, addr):
     rfile = conn.makefile('r')
     wfile = conn.makefile('w')
 
-    with lobby_lock: 
-        if len(lobby) < 2 and not game_lock.locked():
-            lobby.append((conn, rfile, wfile))
-            send(wfile, "[INFO] You are in the lobby")
+    player_id = str(uuid.uuid4())  # Generate a unique ID using UUID
+    send(wfile, "[INFO] Welcome! Please enter your username:")
+    username = recv(rfile).strip()
 
-        else:
-            spectators.append((conn, rfile, wfile))
-            send(wfile, "[INFO] Lobby is full. You are now a spectator.")
+    # Handle reconnecting players
+    send(wfile, "[INFO] Checking for any ongoing games...")
+    player_reconnected = False
+    for player_id in active_players:
+        if handle_reconnection(conn, rfile, wfile, player_id, username):
+            player_reconnected = True
+            break
+    
+    if not player_reconnected:
+        with lobby_lock: 
+            if len(lobby) < 2 and not game_lock.locked():
+                lobby.append((conn, rfile, wfile, player_id, username))
+                send(wfile, "[INFO] You are in the lobby")
 
-            # Start a thread to handle spectator input (ignored or produces an error)
-            threading.Thread(target=handle_spectator_input, args=(rfile, wfile), daemon=True).start()
+            else:
+                spectators.append((conn, rfile, wfile, player_id, username))
+                send(wfile, "[INFO] Lobby is full. You are now a spectator.")
+
+                # Start a thread to handle spectator input (ignored or produces an error)
+                threading.Thread(target=handle_spectator_input, args=(rfile, wfile), daemon=True).start()
 
     # Try to start a new game if possible
     launch_game_if_ready()
