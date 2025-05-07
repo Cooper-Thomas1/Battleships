@@ -1,5 +1,5 @@
 import socket
-from battleship import run_two_player_game_online, send, recv, save_game_state, send_board
+from battleship import run_two_player_game_online, send, recv
 import threading
 import time
 import uuid
@@ -15,6 +15,13 @@ game_states = {}
 lobby_lock = threading.Lock()  # Ensure only one thread accesses the lobby at a time
 game_lock = threading.Lock()  # Ensure only one active game at a time
 
+def save_game_state(player1_id, player2_id, game_data):
+    """
+    Saves the game state for a match (e.g., game boards, turn information).
+    """
+    game_states[player1_id] = game_data
+    game_states[player2_id] = game_data
+
 def handle_reconnection(conn, rfile, wfile, player_id, username):
     """
     Allows a player to reconnect to their previous game if it exists and they are still within the reconnection window.
@@ -26,37 +33,24 @@ def handle_reconnection(conn, rfile, wfile, player_id, username):
             if time.time() - last_disconnect_time <= RECONNECT_TIMEOUT:
                 # Player is eligible to reconnect
                 active_players[player_id]['still_active'] = True
-                
+
+                # Dummy boards (e.g., 5x5 grid with '~' for water)
+                dummy_board = [['~' for _ in range(5)] for _ in range(5)]
+
                 # Check if there's a saved game state for this player
-                game_state = game_states.get(player_id)
-                if game_state:
-                    send(wfile, "[INFO] Reconnection successful. Resuming your previous game.")
-                    # Load the saved game state
-                    # Set the boards and turn info
-                    board1 = game_state['board1']
-                    board2 = game_state['board2']
-                    current_turn = game_state['turn']
-                    send_board(wfile, board1)  # Send the board to the reconnecting player
-                    send_board(wfile, board2)
+                game_state = game_states.get(player_id, {})
+                board1 = game_state.get('board1', dummy_board)
+                board2 = game_state.get('board2', dummy_board)
+                turn = game_state.get('turn', 1)
 
-                    send(wfile, f"[INFO] It's your turn, {username}. Game resumed.")
+                send(wfile, "[INFO] Reconnection successful. Resuming your previous game.")
+                send(wfile, "[INFO] Game state restored.")
+                send(wfile, f"[INFO] Board 1: {board1}")
+                send(wfile, f"[INFO] Board 2: {board2}")
+                send(wfile, f"[INFO] It's player {turn}'s turn.")
 
-                    # Update the game state to resume the flow
-                    game_state['turn'] = current_turn
-                    game_states[player_id] = game_state  # Save back the updated game state
-                    
-                    # Return and resume the game with the loaded state
-                    return True
-                else:
-                    send(wfile, "[INFO] No game state found. Starting a new game.")
+                return True
     return False
-
-def save_game_state(player1_id, player2_id, game_data):
-    """
-    Saves the game state for a match (e.g., game boards, turn information).
-    """
-    game_states[player1_id] = game_data
-    game_states[player2_id] = game_data
 
 def handle_clients(player1, player2):
     """
@@ -72,19 +66,16 @@ def handle_clients(player1, player2):
         active_players[player1_id] = {'username': username1, 'still_active': True, 'disconnect_time': None}
         active_players[player2_id] = {'username': username2, 'still_active': True, 'disconnect_time': None}
 
+        player1_board = []  # Replace with actual initialization logic for player 1's board
+        player2_board = []  # Replace with actual initialization logic for player 2's board
+        turn = 1  # Player 1 starts
+
         game_data = {
-            'board1': None,  # Placeholder for player 1's board
-            'board2': None,  # Placeholder for player 2's board
-            'turn': 1,  # Assume player 1 starts
+            'board1': player1_board,  # Player 1's board
+            'board2': player2_board,  # Player 2's board
+            'turn': turn,  # Whose turn it is
         }
 
-        if handle_reconnection(conn1, rfile1, wfile1, player1_id, username1):
-            return  # Player 1 reconnected and resumed their game
-
-        if handle_reconnection(conn2, rfile2, wfile2, player2_id, username2):
-            return  # Player 2 reconnected and resumed their game 
-        
-        # Save the initial game state
         save_game_state(player1_id, player2_id, game_data)
 
         try:
