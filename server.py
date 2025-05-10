@@ -2,7 +2,6 @@ import socket
 from battleship import run_two_player_game_online, send, recv
 import threading
 import time
-import uuid
 
 HOST = '127.0.0.1'
 PORT = 5000
