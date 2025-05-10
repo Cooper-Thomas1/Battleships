@@ -9,7 +9,6 @@ PORT = 5000
 RECONNECT_TIMEOUT = 60  # 60 seconds for reconnection window
 
 lobby = []  # List to hold players waiting for a game
-spectators = [] # List to hold spectators
 active_players = {}  # Dictionary to store active players' details (ID, username, still_active)
 game_states = {}
 current_match = {}    # username -> (player1_tuple, player2_tuple)
@@ -17,10 +16,12 @@ current_match = {}    # username -> (player1_tuple, player2_tuple)
 lobby_lock = threading.Lock()  # Ensure only one thread accesses the lobby at a time
 game_lock = threading.Lock()  # Ensure only one active game at a time
 
+
 def save_game_state(p1, p2, game_data):
     """Called by battleship after each turn to persist state."""
     game_states[p1] = game_data
     game_states[p2] = game_data
+
 
 def handle_reconnection(player):
     """
@@ -152,11 +153,12 @@ def broadcast_to_spectators(game_state):
     Sends the current game state to all connected spectators.
     """
     with lobby_lock:
-        for conn, rfile, wfile, _ in list(lobby):
+        for entry in list(lobby):
+            conn, rfile, wfile, user = entry
             try:
                 send(wfile, f"[SPECTATOR] Game state update:\n{game_state}")
             except:
-                lobby.remove((conn, rfile, wfile))
+                lobby.remove(entry)
 
 
 def handle_spectator_input(rfile, wfile):
