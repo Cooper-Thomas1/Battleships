@@ -178,9 +178,9 @@ def handle_spectator_input(rfile, wfile, stop_event):
     Handles input from spectators. Any input is ignored or produces an error message.
     """
     try:
+        send(wfile, "[SPECTATOR] You are in the lobby. Waiting for your turn...\n")
         while not stop_event.is_set():  # Stop when the event is set
-            send(wfile, "[SPECTATOR] You are in the lobby. Waiting for your turn...\n")
-            time.sleep(5)
+            time.sleep(1)
     except Exception as e:
         print(f"[ERROR] Spectator input error: {e}")
 
