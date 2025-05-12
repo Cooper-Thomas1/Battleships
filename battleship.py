@@ -388,76 +388,86 @@ def send(wfile, msg):
 def recv(rfile):
     return rfile.readline().strip()
 
-def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
+def send_board(wfile, board):
+    wfile.write("GRID\n")
+    wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
+    for r in range(board.size):
+        row_label = chr(ord('A') + r)
+        row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
+        wfile.write(f"{row_label:2} {row_str}\n")
+    wfile.write('\n')
+    wfile.flush()
+
+def timed_input(rfile, timeout=TIMEOUT):
+    result = {}
+
+    def worker():
+        try:
+            result['data'] = rfile.readline().strip()
+        except Exception:
+            result['data'] = None
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout)
+
+    if thread.is_alive():
+        return None # timeout reaches
+    else:
+        return result.get('data', None)
+
+def broadcast_game_state_to_spectators(players, message, broadcast_callback):
+    """
+    Broadcast the current game state to all spectators.
+    """
+    game_state = []
+    for p in players:
+        board_state = f"{p['name']}'s Board:\n"
+        board_state += "  " + " ".join(str(i + 1).rjust(2) for i in range(p["board"].size)) + '\n'
+        for r in range(p["board"].size):
+            row_label = chr(ord('A') + r)
+            row_str = " ".join(p["board"].display_grid[r][c] for c in range(p["board"].size))
+            board_state += f"{row_label:2} {row_str}\n"
+        game_state.append(board_state)
+    
+    full_message = f"{message}\n\n" + "\n\n".join(game_state)
+    broadcast_callback(full_message)
+
+def run_two_player_game_online(player1_io, player2_io, broadcast_callback, save_state_callback, player1_id, player2_id, initial_state=None):
     """
     Runs a turn-based Battleship game between two online players.
     Each player_io is a tuple of (rfile, wfile) file-like objects.
     """
-    def timed_input(rfile, timeout=TIMEOUT):
-        result = {}
-
-        def worker():
-            try:
-                result['data'] = rfile.readline().strip()
-            except Exception:
-                result['data'] = None
-
-        thread = threading.Thread(target=worker, daemon=True)
-        thread.start()
-        thread.join(timeout)
-
-        if thread.is_alive():
-            return None # timeout reaches
-        else:
-            return result.get('data', None)
-
-    def send_board(wfile, board):
-        wfile.write("GRID\n")
-        wfile.write("  " + " ".join(str(i + 1).rjust(2) for i in range(board.size)) + '\n')
-        for r in range(board.size):
-            row_label = chr(ord('A') + r)
-            row_str = " ".join(board.display_grid[r][c] for c in range(board.size))
-            wfile.write(f"{row_label:2} {row_str}\n")
-        wfile.write('\n')
-        wfile.flush()
-
-    def broadcast_game_state_to_spectators(players, message):
-        """
-        Broadcast the current game state to all spectators.
-        """
-        game_state = []
-        for p in players:
-            board_state = f"{p['name']}'s Board:\n"
-            board_state += "  " + " ".join(str(i + 1).rjust(2) for i in range(p["board"].size)) + '\n'
-            for r in range(p["board"].size):
-                row_label = chr(ord('A') + r)
-                row_str = " ".join(p["board"].display_grid[r][c] for c in range(p["board"].size))
-                board_state += f"{row_label:2} {row_str}\n"
-            game_state.append(board_state)
-        
-        full_message = f"{message}\n\n" + "\n\n".join(game_state)
-        broadcast_callback(full_message)
 
     rfile1, wfile1 = player1_io
     rfile2, wfile2 = player2_io
 
-    board1 = Board(BOARD_SIZE)
-    board2 = Board(BOARD_SIZE)
-    board1.place_ships_randomly(SHIPS)
-    board2.place_ships_randomly(SHIPS)
+    if initial_state:
+        board1 = initial_state['board1']    
+        board2 = initial_state['board2']         
+        current = initial_state['turn']     
+        moves = [                                     
+            initial_state['moves']['Player 1'], 
+            initial_state['moves']['Player 2'] 
+        ]
+
+    else:
+        board1 = Board(BOARD_SIZE)
+        board2 = Board(BOARD_SIZE)
+        board1.place_ships_randomly(SHIPS)
+        board2.place_ships_randomly(SHIPS)
+        current = 0  # Index of current player
+        moves = [0, 0]  # Track moves per player
 
     players = [
         {"name": "Player 1", "r": rfile1, "w": wfile1, "board": board2}, # Fires at player 2’s board
         {"name": "Player 2", "r": rfile2, "w": wfile2, "board": board1} # Fires at player 1’s board
     ]
 
-    for p in players:
-        send(p["w"], f"Welcome {p['name']}! Game is starting now. Type 'quit' to exit.\n")
-
-    current = 0  # Index of current player
-    moves = [0, 0]  # Track moves per player
-
-    broadcast_game_state_to_spectators(players, "Game started. Here are the initial boards:")
+    if not initial_state:
+        for p in players:
+            send(p["w"], f"Welcome {p['name']}! Game is starting now. Type 'quit' to exit.\n")
+        broadcast_game_state_to_spectators(players, "Game started. Here are the initial boards:", broadcast_callback)
 
     while True: # Outer loop: Manages the game flow
         p = players[current]
@@ -474,7 +484,7 @@ def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
             if guess is None:
                 send(p["w"], "Time's up! You took too long to respond.\n")
                 send(opponent["w"], f"{p['name']} took too long.\n")
-                broadcast_game_state_to_spectators(players, f"{p['name']} took too long. Turn forfeited.")
+                broadcast_game_state_to_spectators(players, f"{p['name']} took too long. Turn forfeited.", broadcast_callback)
                 break  # forfeit turn
             
             if not guess:
@@ -489,7 +499,15 @@ def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
                 send_board(p["w"], p["board"])
                 send_board(opponent["w"], opponent["board"])
 
-                broadcast_game_state_to_spectators(players, "Game over. A player forfeited.")
+                broadcast_game_state_to_spectators(players, "Game over. A player forfeited.", broadcast_callback)
+
+                game_data = {
+                    'board1': p["board"],  # Player 1's board
+                    'board2': opponent["board"],  # Player 2's board
+                    'turn': current,  # Current player turn
+                    'moves': moves  # Moves count
+                }
+
                 return
 
             try:
@@ -507,7 +525,7 @@ def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
                         send(p["w"], hit_message)
                         send(opponent["w"], f"{p['name']} hit one of your ships!")
                     
-                    broadcast_game_state_to_spectators(players, hit_message)
+                    broadcast_game_state_to_spectators(players, hit_message, broadcast_callback)
 
                     if p["board"].all_ships_sunk():
                         send(p["w"], f"Congratulations! You sank all ships in {moves[current]} moves.")
@@ -517,23 +535,39 @@ def run_two_player_game_online(player1_io, player2_io, broadcast_callback):
                         send_board(p["w"], p["board"])
                         send_board(opponent["w"], opponent["board"])
 
-                        broadcast_game_state_to_spectators(players, "Game over. All ships have been sunk!")
+                        broadcast_game_state_to_spectators(players, "Game over. All ships have been sunk!", broadcast_callback)
+                        
+                        game_data = {
+                            'board1': p["board"],  # Player 1's board
+                            'board2': opponent["board"],  # Player 2's board
+                            'turn': current,  # Current player turn
+                            'moves': moves  # Moves count
+                        }
+
                         return # Ends the game if all ships are sunk
                     
                 elif result == 'miss':
                     miss_message = "MISS!"
                     send(p["w"], miss_message)
                     send(opponent["w"], f"{p['name']} missed.")
-                    broadcast_game_state_to_spectators(players, miss_message)
+                    broadcast_game_state_to_spectators(players, miss_message, broadcast_callback)
 
                 elif result == 'already_shot':
                     send(p["w"], "You've already fired at that location. Try again.")
                     continue # Lets the player try again
-
+                
                 break
             except ValueError as e:
                 send(p["w"], f"Invalid input: {e}")
         
+        game_data = {
+                    'board1': board1,
+                    'board2': board2,
+                    'turn': 1 - current,
+                    'moves': {'Player 1': moves[0], 'Player 2': moves[1]}
+                }
+        save_state_callback(player1_id, player2_id, game_data)
+    
         current = 1 - current  # Switches turns after each valid shot
 
 def main():
