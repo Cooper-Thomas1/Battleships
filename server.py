@@ -205,7 +205,11 @@ def lobby_manager(conn, addr):
         send(wfile, "[INFO] Welcome! Please enter your username:")
         username = recv(rfile).strip()
 
-        if any(username == entry[3] for entry in lobby) or username in active_players:
+        username_taken_in_lobby = any(username == entry[3] for entry in lobby)
+        username_in_active_players = username in active_players
+        all_players_still_active = all(info['still_active'] for info in active_players.values())
+
+        if username_taken_in_lobby or (username_in_active_players and all_players_still_active):
             send(wfile, "[ERROR] This username is already taken. Please choose a different one.")
         else:
             break
