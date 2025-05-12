@@ -24,23 +24,6 @@ def save_game_state(p1, p2, game_data):
     game_states[p2] = game_data
 
 
-def handle_reconnection(player):
-    """
-    Allows a player to reconnect to their previous game if it exists and they are still within the reconnection window.
-    """
-    conn1, rfile1, wfile1, username1 = player
-
-    with lobby_lock:
-        player = active_players.get(username1, None)
-        if player and not player['still_active']:
-            last_disconnect_time = player['disconnect_time']
-            if time.time() - last_disconnect_time <= RECONNECT_TIMEOUT:
-                active_players[username1]['still_active'] = True
-                send(wfile1, "[INFO] Reconnection successful. Restoring your game state...")
-                return True  
-    return False
-
-
 def handle_clients(player1, player2):
     """
     Handles the game between two connected players.
@@ -184,6 +167,7 @@ def handle_spectator_input(rfile, wfile, stop_event):
     except Exception as e:
         print(f"[ERROR] Spectator input error: {e}")
 
+
 def stop_spectator_thread(username):
     """
     Signals the spectator thread to stop so it doesn't continue processing input.
@@ -271,7 +255,8 @@ def launch_game_if_ready():
             stop_spectator_thread(player2[3])
 
             threading.Thread(target=handle_clients, args=(player1, player2), daemon=True).start()
-            
+
+
 def main():
     """
     Continuously accepts clients and assigns them into games.
@@ -289,6 +274,7 @@ def main():
             except KeyboardInterrupt:
                 print("\n[INFO] Server shutting down.")
                 break
+
 
 if __name__ == "__main__":
     main()
