@@ -1,4 +1,0 @@
-Player 1: 4cdac462-9099-489d-b183-bef03032b5bc
-Player 2: b400fec5-471b-425b-9cda-daf101f3b522
-Turn: 1
-Player 1's Board:

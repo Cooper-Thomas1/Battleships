@@ -403,7 +403,8 @@ def timed_input(rfile, timeout=TIMEOUT):
 
     def worker():
         try:
-            result['data'] = rfile.readline().strip()
+            raw_data = rfile.readline().strip()
+            result['data'] = raw_data.split('|')[0]
         except Exception:
             result['data'] = None
 
@@ -509,7 +510,6 @@ def run_two_player_game_online(player1_io, player2_io, broadcast_callback, save_
                 }
 
                 return
-
             try:
                 row, col = parse_coordinate(guess)
                 result, sunk_name = p["board"].fire_at(row, col)

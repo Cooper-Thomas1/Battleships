@@ -3,15 +3,25 @@ client.py
 
 Connects to a Battleship server which runs the single-player game.
 Simply pipes user input to the server, and prints all server responses.
-
-TODO: Fix the message synchronization issue using concurrency (Tier 1, item 1).
 """
 
 import socket
 import threading
+import zlib
 
 HOST = '127.0.0.1'
 PORT = 5000
+
+def generate_crc32_checksum(data):
+    return zlib.crc32(data) & 0xFFFFFFFF
+
+
+def verify_checksum(message, expected_checksum):
+    message_data, checksum_str = message.rsplit('|', 1)
+    checksum = int(checksum_str)
+    computed_checksum = generate_crc32_checksum(message_data.encode())
+    return checksum == computed_checksum
+
 
 def receive_messages(rfile, socket_obj, stop_event):
     try:
@@ -33,8 +43,11 @@ def receive_messages(rfile, socket_obj, stop_event):
                         break
                     print(board_line.strip())
             else:
-                # Normal message
-                print(line)
+                if '|' in line:
+                    message, _ = line.rsplit('|', 1)  # discard checksum
+                    print(message)
+                else:
+                    print(line)
 
     except Exception as e:
         print(f"[ERROR] An error occurred in the receive thread: {e}")
@@ -42,16 +55,22 @@ def receive_messages(rfile, socket_obj, stop_event):
     finally:
         socket_obj.close()
 
+
 def handle_user_input(wfile, stop_event):
     try:
         while not stop_event.is_set():
             user_input = input(">> ")
             if stop_event.is_set():  # Exit if the server disconnects
                 break
-            wfile.write(user_input + '\n')
+            
+            checksum = generate_crc32_checksum(user_input.encode())
+            message = f"{user_input}|{checksum}"
+
+            wfile.write(message + "\n")
             wfile.flush()
     except Exception as e:
         print(f"[ERROR] An error occurred in the input thread: {e}")
+
 
 def main():
     stop_event = threading.Event()  # Create a stop event to coordinate threads

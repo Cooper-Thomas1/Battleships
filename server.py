@@ -2,6 +2,7 @@ import socket
 from battleship import run_two_player_game_online, send, recv
 import threading
 import time
+import zlib
 
 HOST = '127.0.0.1'
 PORT = 5000
@@ -17,6 +18,31 @@ game_lock = threading.Lock()  # Ensure only one active game at a time
 
 spectator_threads = {}
 
+def send_with_checksum(wfile, message):
+    """
+    Send a message with a checksum attached to the client.
+    """
+    checksum = zlib.crc32(message.encode())
+    message_with_checksum = f"{message}|{checksum}"
+    wfile.write(message_with_checksum + '\n')
+    wfile.flush()
+
+
+def recv_with_checksum(rfile):
+    """
+    Receive a message with checksum from the client and verify its integrity.
+    """
+    message_with_checksum = rfile.readline().strip()
+    try:
+        message, received_checksum = message_with_checksum.rsplit('|', 1) 
+        calculated_checksum = zlib.crc32(message.encode())  
+        
+        if int(received_checksum) == calculated_checksum: 
+            return message
+    except:
+        pass  # Silently discard any malformed or invalid messages
+    return None
+        
 
 def save_game_state(p1, p2, game_data):
     """Called by battleship after each turn to persist state."""
@@ -50,21 +76,21 @@ def handle_clients(player1, player2):
                 run_two_player_game_online((rfile1, wfile1), (rfile2, wfile2), broadcast_to_spectators, save_game_state,
                 username1, username2, initial_state=initial_state)
 
-                send(wfile1, "[INFO] Game over. Do you want to play again? (yes/no)")
-                send(wfile2, "[INFO] Game over. Do you want to play again? (yes/no)")
+                send_with_checksum(wfile1, "[INFO] Game over. Do you want to play again? (yes/no)")
+                send_with_checksum(wfile2, "[INFO] Game over. Do you want to play again? (yes/no)")
 
-                response1 = recv(rfile1).strip().lower()
-                response2 = recv(rfile2).strip().lower()
+                response1 = recv_with_checksum(rfile1).strip().lower()
+                response2 = recv_with_checksum(rfile2).strip().lower()
 
                 if response1 == "yes" and response2 == "yes":
-                    send(wfile1, "[INFO] Game ended. Thanks for playing!")
-                    send(wfile2, "[INFO] Game ended. Thanks for playing!")
+                    send_with_checksum(wfile1, "[INFO] Game ended. Thanks for playing!")
+                    send_with_checksum(wfile2, "[INFO] Game ended. Thanks for playing!")
                     game_states.pop(username1, None)
                     game_states.pop(username2, None)
                     continue
                 else:
-                    send(wfile1, "[INFO] Game ended. Returning to lobby." if response1 == "yes" else "[INFO] Goodbye!")
-                    send(wfile2, "[INFO] Game ended. Returning to lobby." if response2 == "yes" else "[INFO] Goodbye!")
+                    send_with_checksum(wfile1, "[INFO] Game ended. Returning to lobby." if response1 == "yes" else "[INFO] Goodbye!")
+                    send_with_checksum(wfile2, "[INFO] Game ended. Returning to lobby." if response2 == "yes" else "[INFO] Goodbye!")
 
                     # Re-add players who want to play again to the lobby
                     with lobby_lock:
@@ -79,13 +105,13 @@ def handle_clients(player1, player2):
             disconnected, opponent = None, None
 
             try:
-                send(wfile1, "[PING]")
+                send_with_checksum(wfile1, "[PING]")
                 player1_connected = True
             except:
                 player1_connected = False
 
             try:
-                send(wfile2, "[PING]")
+                send_with_checksum(wfile2, "[PING]")
                 player2_connected = True
             except:
                 player2_connected = False
@@ -116,7 +142,7 @@ def handle_clients(player1, player2):
                     break
 
             print(f"[INFO] {disconnected} failed to reconnect. {opponent[3]} wins by default.")
-            send(opponent[2], f"[INFO] {disconnected} failed to reconnect in time. You win!")
+            send_with_checksum(opponent[2], f"[INFO] {disconnected} failed to reconnect in time. You win!")
 
         finally:
             if not did_resume:
@@ -151,7 +177,7 @@ def broadcast_to_spectators(game_state):
         for entry in list(lobby):
             conn, rfile, wfile, user = entry
             try:
-                send(wfile, f"[SPECTATOR] Game state update:\n{game_state}")
+                send_with_checksum(wfile, f"[SPECTATOR] Game state update:\n{game_state}")
             except:
                 lobby.remove(entry)
 
@@ -161,7 +187,7 @@ def handle_spectator_input(rfile, wfile, stop_event):
     Handles input from spectators. Any input is ignored or produces an error message.
     """
     try:
-        send(wfile, "[SPECTATOR] You are in the lobby. Waiting for your turn...\n")
+        send_with_checksum(wfile, "[SPECTATOR] You are in the lobby. Waiting for your turn...\n")
         while not stop_event.is_set():  # Stop when the event is set
             time.sleep(1)
     except Exception as e:
@@ -186,23 +212,24 @@ def lobby_manager(conn, addr):
     wfile = conn.makefile('w')
 
     while True:
-        send(wfile, "[INFO] Welcome! Please enter your username:")
-        username = recv(rfile).strip()
+        send_with_checksum(wfile, "[INFO] Welcome! Please enter your username:")
+
+        username = recv_with_checksum(rfile).strip()
 
         username_taken_in_lobby = any(username == entry[3] for entry in lobby)
         username_in_active_players = username in active_players
         all_players_still_active = all(info['still_active'] for info in active_players.values())
 
         if username_taken_in_lobby or (username_in_active_players and all_players_still_active):
-            send(wfile, "[ERROR] This username is already taken. Please choose a different one.")
+            send_with_checksum(wfile, "[ERROR] This username is already taken. Please choose a different one.")
         else:
             break
 
     # Handle reconnecting players
-    send(wfile, "[INFO] Checking for any ongoing games...")
+    send_with_checksum(wfile, "[INFO] Checking for any ongoing games...")
     if username in active_players and not active_players[username]['still_active'] and game_lock.locked():
         if username not in game_states:
-            send(wfile, "[INFO] Your previous game has already ended. You will return to the lobby.")
+            send_with_checksum(wfile, "[INFO] Your previous game has already ended. You will return to the lobby.")
         
         else:
             print(f"[INFO] {username} attempting to reconnect...")
@@ -215,7 +242,7 @@ def lobby_manager(conn, addr):
             else:
                 resume_self, resume_opp = (conn, rfile, wfile, username), p1
 
-            send(wfile, "[INFO] Reconnected! Waiting for game to resume...")
+            send_with_checksum(wfile, "[INFO] Reconnected! Waiting for game to resume...")
             threading.Thread(target=run_two_player_game_online,
                 args=((resume_self[1], resume_self[2]), (resume_opp[1], resume_opp[2]),
                     broadcast_to_spectators,
@@ -230,10 +257,10 @@ def lobby_manager(conn, addr):
    
     with lobby_lock: 
         if len(lobby) < 2 and not game_lock.locked():
-            send(wfile, "[INFO] You are in the lobby")
+            send_with_checksum(wfile, "[INFO] You are in the lobby")
             lobby.append((conn, rfile, wfile, username))
         else:
-            send(wfile, "[INFO] Game is full. You are now a spectator.")
+            send_with_checksum(wfile, "[INFO] Game is full. You are now a spectator.")
             stop_event = threading.Event()
             spectator_threads[username] = stop_event
             lobby.append((conn, rfile, wfile, username))
@@ -249,7 +276,7 @@ def launch_game_if_ready():
 
             for entry in [player1, player2]:
                 conn, rfile, wfile, user = entry
-                send(wfile, f"[INFO] {player1[3]} and {player2[3]} will be playing the next game!")
+                send_with_checksum(wfile, f"[INFO] {player1[3]} and {player2[3]} will be playing the next game!")
 
             stop_spectator_thread(player1[3])
             stop_spectator_thread(player2[3])
