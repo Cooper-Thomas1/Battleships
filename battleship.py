@@ -404,7 +404,7 @@ def timed_input(rfile, timeout=TIMEOUT):
     def worker():
         try:
             raw_data = rfile.readline().strip()
-            result['data'] = raw_data.split('|')[0]
+            result['data'] = raw_data.split('|')[0] # gets the message part of the packet
         except Exception:
             result['data'] = None
 

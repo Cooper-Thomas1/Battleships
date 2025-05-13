@@ -4,10 +4,10 @@ client.py
 Connects to a Battleship server which runs the single-player game.
 Simply pipes user input to the server, and prints all server responses.
 """
-
 import socket
 import threading
-import zlib
+import zlib 
+from crypto_utils import decrypt_message, encrypt_message
 
 HOST = '127.0.0.1'
 PORT = 5000
@@ -15,11 +15,10 @@ PORT = 5000
 def generate_crc32_checksum(data):
     return zlib.crc32(data) & 0xFFFFFFFF
 
-
 def verify_checksum(message, expected_checksum):
-    message_data, checksum_str = message.rsplit('|', 1)
+    message_data, checksum_str = message.rsplit('|', 1) # message = data|checksum
     checksum = int(checksum_str)
-    computed_checksum = generate_crc32_checksum(message_data.encode())
+    computed_checksum = generate_crc32_checksum(message_data.encode()) # generate checksum from message and compare with the received checksum
     return checksum == computed_checksum
 
 
@@ -44,7 +43,9 @@ def receive_messages(rfile, socket_obj, stop_event):
                     print(board_line.strip())
             else:
                 if '|' in line:
-                    message, _ = line.rsplit('|', 1)  # discard checksum
+                    message_enc, _ = line.rsplit('|', 1)  # discard checksum
+                    # message shoudl be encrypted and therefore in the format (iv+ciphertext)
+                    message = decrypt_message(message_enc)
                     print(message)
                 else:
                     print(line)
@@ -63,10 +64,13 @@ def handle_user_input(wfile, stop_event):
             if stop_event.is_set():  # Exit if the server disconnects
                 break
             
-            checksum = generate_crc32_checksum(user_input.encode())
-            message = f"{user_input}|{checksum}"
+            # encrypt the user input before adding the checksum
+            encrypted_message = encrypt_message(user_input) # this is in bytes
+            
+            checksum = generate_crc32_checksum(encrypted_message.encode())
+            message = f"{encrypted_message}|{checksum}"
 
-            wfile.write(message + "\n")
+            wfile.write(message + "\n") # writes the (iv + msg)|checksum packet to the wfile
             wfile.flush()
     except Exception as e:
         print(f"[ERROR] An error occurred in the input thread: {e}")
