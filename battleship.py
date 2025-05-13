@@ -11,6 +11,7 @@ Contains core data structures and logic for Battleship, including:
 import random
 import threading
 import queue
+from crypto_utils import decrypt_message
 
 BOARD_SIZE = 10
 SHIPS = [
@@ -230,12 +231,13 @@ class Board:
             print(f"{row_label:2} {row_str}")
 
 
-def parse_coordinate(coord_str):
+def parse_coordinate(coord_enc):
     """
     Convert something like 'B5' into zero-based (row, col).
     Example: 'A1' => (0, 0), 'C10' => (2, 9)
     HINT: you might want to add additional input validation here...
     """
+    coord_str = decrypt_message(coord_enc)
     coord_str = coord_str.strip().upper()
     row_letter = coord_str[0]
     col_digits = coord_str[1:]
