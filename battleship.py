@@ -231,13 +231,12 @@ class Board:
             print(f"{row_label:2} {row_str}")
 
 
-def parse_coordinate(coord_enc):
+def parse_coordinate(coord_str):
     """
     Convert something like 'B5' into zero-based (row, col).
     Example: 'A1' => (0, 0), 'C10' => (2, 9)
     HINT: you might want to add additional input validation here...
     """
-    coord_str = decrypt_message(coord_enc)
     coord_str = coord_str.strip().upper()
     row_letter = coord_str[0]
     col_digits = coord_str[1:]
@@ -402,11 +401,12 @@ def send_board(wfile, board):
 
 def timed_input(rfile, timeout=TIMEOUT):
     result = {}
-
     def worker():
         try:
             raw_data = rfile.readline().strip()
-            result['data'] = raw_data.split('|')[0] # gets the message part of the packet
+            encrypted_msg = raw_data.split('|')[0]
+            decrypted_msg = decrypt_message(encrypted_msg)
+            result['data'] = decrypted_msg
         except Exception:
             result['data'] = None
 
