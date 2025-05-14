@@ -1,8 +1,10 @@
 import socket
 from battleship import run_two_player_game_online, send, recv
+from crypto_utils import encrypt_message, decrypt_message
 import threading
 import time
 import zlib
+
 
 HOST = '127.0.0.1'
 PORT = 5000
@@ -18,12 +20,16 @@ game_lock = threading.Lock()  # Ensure only one active game at a time
 
 spectator_threads = {}
 
+  
 def send_with_checksum(wfile, message):
     """
-    Send a message with a checksum attached to the client.
+    Send a message with a checksum attached, to the client.
     """
-    checksum = zlib.crc32(message.encode())
-    message_with_checksum = f"{message}|{checksum}"
+    # encrypt the message (iv+msg)
+    encrypted_message = encrypt_message(message)
+    
+    checksum = zlib.crc32(encrypted_message.encode())
+    message_with_checksum = f"{encrypted_message}|{checksum}"
     wfile.write(message_with_checksum + '\n')
     wfile.flush()
 
@@ -31,6 +37,9 @@ def send_with_checksum(wfile, message):
 def recv_with_checksum(rfile):
     """
     Receive a message with checksum from the client and verify its integrity.
+    
+    At this point the message looks like
+    (iv + cyphertext)|checksum
     """
     message_with_checksum = rfile.readline().strip()
     try:
@@ -38,11 +47,20 @@ def recv_with_checksum(rfile):
         calculated_checksum = zlib.crc32(message.encode())  
         
         if int(received_checksum) == calculated_checksum: 
-            return message
+            return recv_encrypted_data(message) 
     except:
         pass  # Silently discard any malformed or invalid messages
     return None
-        
+
+def recv_encrypted_data(enc_message):
+    """
+    At this point, the message looks like
+    iv + cyphertext
+    
+    we know the iv is 16 bytes long
+    """
+    plaintext = decrypt_message(enc_message)
+    return plaintext
 
 def save_game_state(p1, p2, game_data):
     """Called by battleship after each turn to persist state."""

@@ -11,6 +11,7 @@ Contains core data structures and logic for Battleship, including:
 import random
 import threading
 import queue
+from crypto_utils import decrypt_message
 
 BOARD_SIZE = 10
 SHIPS = [
@@ -400,11 +401,12 @@ def send_board(wfile, board):
 
 def timed_input(rfile, timeout=TIMEOUT):
     result = {}
-
     def worker():
         try:
             raw_data = rfile.readline().strip()
-            result['data'] = raw_data.split('|')[0]
+            encrypted_msg = raw_data.split('|')[0]
+            decrypted_msg = decrypt_message(encrypted_msg)
+            result['data'] = decrypted_msg
         except Exception:
             result['data'] = None
 
