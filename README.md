@@ -4,14 +4,14 @@ We have been hired by Socket & Sunk to develop a networked, turn-based Battleshi
 
 Our job is to fix these problems and develop a properly functioning multiplayer server.
 
-## How to run   
+## How To Run   
 To play a local single player battleship game using our code:     
-run ```python3 battleship.py```   
+1. Run ```python battleship.py```      
 
 To play an online two player battleship game using our code:    
-1. Run ```python server.py``` in one terminal
-2. Open another terminal and run ```python client.py```
-3. Open a third terminal and run ```python client.py```.
+1. Run ```python server.py``` in one terminal   
+2. Open another terminal and run ```python client.py```    
+3. Open a third terminal and run ```python client.py```.    
 
 ## Demo Video
 https://youtu.be/9cjmmwtAgOU     
@@ -23,4 +23,5 @@ BEER/
 ├── battleship.py
 ├── client.py
 ├── server.py
+├── crypto_utils.py
 ```
