@@ -43,11 +43,23 @@ def recv_with_checksum(rfile):
     """
     message_with_checksum = rfile.readline().strip()
     try:
-        message, received_checksum = message_with_checksum.rsplit('|', 1) 
-        calculated_checksum = zlib.crc32(message.encode())  
+        # extract checksum
+        message_with_seq, received_checksum = message_with_checksum.rsplit('|', 1) 
         
-        if int(received_checksum) == calculated_checksum: 
-            return recv_encrypted_data(message) 
+        # validate checksum
+        calculated_checksum = zlib.crc32(message_with_seq.encode())  
+        if int(received_checksum) != calculated_checksum: 
+            return None
+        
+        # extract seq num 
+        seq_str, encrypted_data = message_with_seq.split('|',1)
+        seq = int(seq_str) 
+        
+        #TODO: store the sequence number somewhere to track 
+        
+        plaintext = recv_encrypted_data(encrypted_data)
+        return seq, plaintext
+        
     except:
         pass  # Silently discard any malformed or invalid messages
     return None
@@ -97,9 +109,11 @@ def handle_clients(player1, player2):
                 send_with_checksum(wfile1, "[INFO] Game over. Do you want to play again? (yes/no)")
                 send_with_checksum(wfile2, "[INFO] Game over. Do you want to play again? (yes/no)")
 
-                response1 = recv_with_checksum(rfile1).strip().lower()
-                response2 = recv_with_checksum(rfile2).strip().lower()
+                seq, response1 = recv_with_checksum(rfile1).strip().lower()
+                seq, response2 = recv_with_checksum(rfile2).strip().lower()
 
+                #TODO: check sequence number here 
+                
                 if response1 == "yes" and response2 == "yes":
                     send_with_checksum(wfile1, "[INFO] Game ended. Thanks for playing!")
                     send_with_checksum(wfile2, "[INFO] Game ended. Thanks for playing!")
@@ -232,8 +246,10 @@ def lobby_manager(conn, addr):
     while True:
         send_with_checksum(wfile, "[INFO] Welcome! Please enter your username:")
 
-        username = recv_with_checksum(rfile).strip()
+        seq, username = recv_with_checksum(rfile).strip()
 
+        #TODO: check sequence number here 
+        
         username_taken_in_lobby = any(username == entry[3] for entry in lobby)
         username_in_active_players = username in active_players
         all_players_still_active = all(info['still_active'] for info in active_players.values())

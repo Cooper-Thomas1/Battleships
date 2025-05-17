@@ -58,6 +58,7 @@ def receive_messages(rfile, socket_obj, stop_event):
 
 
 def handle_user_input(wfile, stop_event):
+    seq_num = 0
     try:
         while not stop_event.is_set():
             user_input = input(">> ")
@@ -66,12 +67,15 @@ def handle_user_input(wfile, stop_event):
             
             # encrypt the user input before adding the checksum
             encrypted_message = encrypt_message(user_input) # this is in bytes
+            combined = f"{seq_num}|{encrypted_message}"
             
-            checksum = generate_crc32_checksum(encrypted_message.encode())
-            message = f"{encrypted_message}|{checksum}"
+            checksum = generate_crc32_checksum(combined.encode())
+            message = f"{combined}|{checksum}"
 
             wfile.write(message + "\n") # writes the (iv + msg)|checksum packet to the wfile
             wfile.flush()
+            
+            seq_num +=1 
     except Exception as e:
         print(f"[ERROR] An error occurred in the input thread: {e}")
 
