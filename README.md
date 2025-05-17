@@ -12,7 +12,7 @@ To play an online two player battleship game using our code:
 run ```python3 server.py``` in one terminal, open another terminal and run ```python3 client.py``` and then open a third terminal and run ```python3 client.py```.
 
 ## Demo Video
-https://youtu.be/k4UWpJZWGu4
+https://youtu.be/9cjmmwtAgOU
 
 
 ## Directory Structure
