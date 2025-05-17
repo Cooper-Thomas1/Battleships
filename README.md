@@ -9,11 +9,12 @@ To play a local single player battleship game using our code:
 run ```python3 battleship.py```   
 
 To play an online two player battleship game using our code:    
-run ```python3 server.py``` in one terminal, open another terminal and run ```python3 client.py``` and then open a third terminal and run ```python3 client.py```.
+1. Run ```python server.py``` in one terminal
+2. Open another terminal and run ```python client.py```
+3. Open a third terminal and run ```python client.py```.
 
 ## Demo Video
-https://youtu.be/9cjmmwtAgOU
-
+https://youtu.be/9cjmmwtAgOU     
 
 ## Directory Structure
 ```
