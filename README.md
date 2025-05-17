@@ -22,6 +22,6 @@ BEER/
 │
 ├── battleship.py
 ├── client.py
-├── server.py
 ├── crypto_utils.py
+├── server.py
 ```
