@@ -404,7 +404,7 @@ def timed_input(rfile, timeout=TIMEOUT):
     def worker():
         try:
             raw_data = rfile.readline().strip()
-            encrypted_msg = raw_data.split('|')[0]
+            encrypted_msg = raw_data.split('|')[1]
             decrypted_msg = decrypt_message(encrypted_msg)
             result['data'] = decrypted_msg
         except Exception:
@@ -483,7 +483,7 @@ def run_two_player_game_online(player1_io, player2_io, broadcast_callback, save_
 
         while True: # Inner loop: Handles input and game logic
             guess = timed_input(p["r"])
-
+            
             if guess is None:
                 send(p["w"], "Time's up! You took too long to respond.\n")
                 send(opponent["w"], f"{p['name']} took too long.\n")

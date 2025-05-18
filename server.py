@@ -39,7 +39,7 @@ def recv_with_checksum(rfile):
     Receive a message with checksum from the client and verify its integrity.
     
     At this point the message looks like
-    (iv + cyphertext)|checksum
+    seq|(iv + cyphertext)|checksum
     """
     message_with_checksum = rfile.readline().strip()
     try:
@@ -54,8 +54,6 @@ def recv_with_checksum(rfile):
         # extract seq num 
         seq_str, encrypted_data = message_with_seq.split('|',1)
         seq = int(seq_str) 
-        
-        #TODO: store the sequence number somewhere to track 
         
         plaintext = recv_encrypted_data(encrypted_data)
         return seq, plaintext
@@ -98,7 +96,7 @@ def handle_clients(player1, player2):
 
         active_players[username1] = {'still_active': True, 'disconnect_time': None}
         active_players[username2] = {'still_active': True, 'disconnect_time': None}
-
+        
         initial_state = game_states.get(username1)
       
         try:
@@ -109,10 +107,13 @@ def handle_clients(player1, player2):
                 send_with_checksum(wfile1, "[INFO] Game over. Do you want to play again? (yes/no)")
                 send_with_checksum(wfile2, "[INFO] Game over. Do you want to play again? (yes/no)")
 
-                seq, response1 = recv_with_checksum(rfile1).strip().lower()
-                seq, response2 = recv_with_checksum(rfile2).strip().lower()
-
-                #TODO: check sequence number here 
+                seq1, response1 = recv_with_checksum(rfile1)
+                seq2, response2 = recv_with_checksum(rfile2)
+                
+                response1 = response1.strip().lower()
+                
+                response2 = response2.strip().lower()
+                
                 
                 if response1 == "yes" and response2 == "yes":
                     send_with_checksum(wfile1, "[INFO] Game ended. Thanks for playing!")
@@ -250,8 +251,6 @@ def lobby_manager(conn, addr):
         
         username = username.strip()
 
-        #TODO: check sequence number here 
-        
         username_taken_in_lobby = any(username == entry[3] for entry in lobby)
         username_in_active_players = username in active_players
         all_players_still_active = all(info['still_active'] for info in active_players.values())
