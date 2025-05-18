@@ -28,6 +28,8 @@ def send_with_checksum(wfile, message):
     # encrypt the message (iv+msg)
     encrypted_message = encrypt_message(message)
     
+    # TODO: should we be sending with an acknowledgement where acknowledgement = the last sequence number received?
+    
     checksum = zlib.crc32(encrypted_message.encode())
     message_with_checksum = f"{encrypted_message}|{checksum}"
     wfile.write(message_with_checksum + '\n')
@@ -94,8 +96,8 @@ def handle_clients(player1, player2):
         current_match[username1] = (player1, player2)
         current_match[username2] = (player1, player2)
 
-        active_players[username1] = {'still_active': True, 'disconnect_time': None}
-        active_players[username2] = {'still_active': True, 'disconnect_time': None}
+        active_players[username1] = {'still_active': True, 'disconnect_time': None, 'last_received_seq': -1}
+        active_players[username2] = {'still_active': True, 'disconnect_time': None, 'last_received_seq': -1}
         
         initial_state = game_states.get(username1)
       
@@ -111,9 +113,27 @@ def handle_clients(player1, player2):
                 seq2, response2 = recv_with_checksum(rfile2)
                 
                 response1 = response1.strip().lower()
+                response2 = response2.strip().lower() 
                 
-                response2 = response2.strip().lower()
+                # this checks if the sequence number is strictyly increasing, if not there must be an error and the game is ended and players are immediately disconnected
+                # TODO: add retry logic or implement a message buffer
                 
+                if seq1 is None or seq1 <= active_players[username1]['last_received_seq']:
+                    print(f"[WARNING] Invalid or duplicate seq from {username1}: {seq1}")
+                    send_with_checksum(wfile1, "[ERROR] Invalid or duplicate seq. Exiting game.")
+                    game_states.pop(username1, None)
+                    game_states.pop(username2, None)
+                    continue 
+
+                if seq2 is None or seq2 <= active_players[username2]['last_received_seq']:
+                    print(f"[WARNING] Invalid or duplicate seq from {username2}: {seq2}")
+                    send_with_checksum(wfile2, "[ERROR] Invalid or duplicate seq. Exiting game.")
+                    game_states.pop(username1, None)
+                    game_states.pop(username2, None)
+                    continue
+
+                active_players[username1]['last_received_seq'] = seq1
+                active_players[username2]['last_received_seq'] = seq2                      
                 
                 if response1 == "yes" and response2 == "yes":
                     send_with_checksum(wfile1, "[INFO] Game ended. Thanks for playing!")

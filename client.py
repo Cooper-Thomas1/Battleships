@@ -67,10 +67,10 @@ def handle_user_input(wfile, stop_event):
             
             # encrypt the user input before adding the checksum
             encrypted_message = encrypt_message(user_input) # this is in bytes
-            combined = f"{seq_num}|{encrypted_message}"
+            message_with_seq = f"{seq_num}|{encrypted_message}"
             
-            checksum = generate_crc32_checksum(combined.encode())
-            message = f"{combined}|{checksum}"
+            checksum = generate_crc32_checksum(message_with_seq.encode())
+            message = f"{message_with_seq}|{checksum}"
 
             wfile.write(message + "\n") # writes the (iv + msg)|checksum packet to the wfile
             wfile.flush()
