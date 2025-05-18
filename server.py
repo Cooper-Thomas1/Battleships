@@ -246,7 +246,9 @@ def lobby_manager(conn, addr):
     while True:
         send_with_checksum(wfile, "[INFO] Welcome! Please enter your username:")
 
-        seq, username = recv_with_checksum(rfile).strip()
+        seq, username = recv_with_checksum(rfile)
+        
+        username = username.strip()
 
         #TODO: check sequence number here 
         
