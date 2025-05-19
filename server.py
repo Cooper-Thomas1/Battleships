@@ -275,7 +275,7 @@ def lobby_manager(conn, addr):
 
         seq, username = recv_with_checksum(rfile)
         
-        username = username.strip()
+        username = username.strip().lower()
 
         username_taken_in_lobby = any(username == entry[3] for entry in lobby)
         username_in_active_players = username in active_players
