@@ -43,7 +43,7 @@ def receive_messages(rfile, socket_obj, stop_event):
                     print(board_line.strip())
             else:
                 if '|' in line:
-                    message_enc, _ = line.rsplit('|', 1)  # discard checksum
+                    seq, message_enc, _ = line.rsplit('|', 2)  # discard checksum
                     # message shoudl be encrypted and therefore in the format (iv+ciphertext)
                     message = decrypt_message(message_enc)
                     print(message)

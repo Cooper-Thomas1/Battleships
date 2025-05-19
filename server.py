@@ -21,19 +21,28 @@ game_lock = threading.Lock()  # Ensure only one active game at a time
 spectator_threads = {}
 
   
-def send_with_checksum(wfile, message):
+def send_with_checksum(wfile, message, username=None):
     """
     Send a message with a checksum attached, to the client.
     """
     # encrypt the message (iv+msg)
     encrypted_message = encrypt_message(message)
     
-    # TODO: should we be sending with an acknowledgement where acknowledgement = the last sequence number received?
-    
-    checksum = zlib.crc32(encrypted_message.encode())
-    message_with_checksum = f"{encrypted_message}|{checksum}"
-    wfile.write(message_with_checksum + '\n')
-    wfile.flush()
+    # send an acknowledgement if the message is going to an active player 
+    if username:
+        ack = active_players[username]['last_received_seq']
+        enc_message_with_seq = f"{ack}|{encrypted_message}"
+        checksum = zlib.crc32(encrypted_message.encode())
+        message_with_checksum = f"{enc_message_with_seq}|{checksum}"
+        wfile.write(message_with_checksum + '\n')
+        wfile.flush()
+    else:
+        # else just send encrypted message and checksum with empty header so that it can be unpacked properly in client.p
+        enc_message_with_no_header = f"|{encrypted_message}"
+        checksum = zlib.crc32(encrypted_message.encode())
+        message_with_checksum = f"{enc_message_with_no_header}|{checksum}"        
+        wfile.write(message_with_checksum + '\n')
+        wfile.flush()
 
 
 def recv_with_checksum(rfile):
@@ -106,28 +115,25 @@ def handle_clients(player1, player2):
                 run_two_player_game_online((rfile1, wfile1), (rfile2, wfile2), broadcast_to_spectators, save_game_state,
                 username1, username2, initial_state=initial_state)
 
-                send_with_checksum(wfile1, "[INFO] Game over. Do you want to play again? (yes/no)")
-                send_with_checksum(wfile2, "[INFO] Game over. Do you want to play again? (yes/no)")
+                send_with_checksum(wfile1, "[INFO] Game over. Do you want to play again? (yes/no)", username1)
+                send_with_checksum(wfile2, "[INFO] Game over. Do you want to play again? (yes/no)", username2)
 
                 seq1, response1 = recv_with_checksum(rfile1)
                 seq2, response2 = recv_with_checksum(rfile2)
                 
                 response1 = response1.strip().lower()
                 response2 = response2.strip().lower() 
-                
-                # this checks if the sequence number is strictyly increasing, if not there must be an error and the game is ended and players are immediately disconnected
-                # TODO: add retry logic or implement a message buffer
-                
+                                
                 if seq1 is None or seq1 <= active_players[username1]['last_received_seq']:
                     print(f"[WARNING] Invalid or duplicate seq from {username1}: {seq1}")
-                    send_with_checksum(wfile1, "[ERROR] Invalid or duplicate seq. Exiting game.")
+                    send_with_checksum(wfile1, "[ERROR] Invalid or duplicate seq. Exiting game.", username1)
                     game_states.pop(username1, None)
                     game_states.pop(username2, None)
                     continue 
 
                 if seq2 is None or seq2 <= active_players[username2]['last_received_seq']:
                     print(f"[WARNING] Invalid or duplicate seq from {username2}: {seq2}")
-                    send_with_checksum(wfile2, "[ERROR] Invalid or duplicate seq. Exiting game.")
+                    send_with_checksum(wfile2, "[ERROR] Invalid or duplicate seq. Exiting game.", username2)
                     game_states.pop(username1, None)
                     game_states.pop(username2, None)
                     continue
@@ -136,14 +142,14 @@ def handle_clients(player1, player2):
                 active_players[username2]['last_received_seq'] = seq2                      
                 
                 if response1 == "yes" and response2 == "yes":
-                    send_with_checksum(wfile1, "[INFO] Game ended. Thanks for playing!")
-                    send_with_checksum(wfile2, "[INFO] Game ended. Thanks for playing!")
+                    send_with_checksum(wfile1, "[INFO] Game ended. Thanks for playing!", username1)
+                    send_with_checksum(wfile2, "[INFO] Game ended. Thanks for playing!", username2)
                     game_states.pop(username1, None)
                     game_states.pop(username2, None)
                     continue
                 else:
-                    send_with_checksum(wfile1, "[INFO] Game ended. Returning to lobby." if response1 == "yes" else "[INFO] Goodbye!")
-                    send_with_checksum(wfile2, "[INFO] Game ended. Returning to lobby." if response2 == "yes" else "[INFO] Goodbye!")
+                    send_with_checksum(wfile1, "[INFO] Game ended. Returning to lobby." if response1 == "yes" else "[INFO] Goodbye!", username1)
+                    send_with_checksum(wfile2, "[INFO] Game ended. Returning to lobby." if response2 == "yes" else "[INFO] Goodbye!", username2)
 
                     # Re-add players who want to play again to the lobby
                     with lobby_lock:
@@ -158,13 +164,13 @@ def handle_clients(player1, player2):
             disconnected, opponent = None, None
 
             try:
-                send_with_checksum(wfile1, "[PING]")
+                send_with_checksum(wfile1, "[PING]", username1)
                 player1_connected = True
             except:
                 player1_connected = False
 
             try:
-                send_with_checksum(wfile2, "[PING]")
+                send_with_checksum(wfile2, "[PING]", username2)
                 player2_connected = True
             except:
                 player2_connected = False
