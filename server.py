@@ -164,25 +164,22 @@ def handle_clients(player1, player2):
 
         finally:
             if not did_resume:
-                for p in (player1, player2):
-                    conn  = p[0]
-                    rfile = p[1] if len(p) > 1 else None
-                    wfile = p[2] if len(p) > 2 else None
-
-                    if rfile:
-                        try: rfile.close()
-                        except: pass
-                    if wfile:
-                        try: wfile.close()
-                        except: pass
-                    try:
-                        conn.close()
-                    except:
-                        pass
-                active_players.pop(username1, None)
-                active_players.pop(username2, None)
-                game_states.pop(username1, None)
-                game_states.pop(username2, None)
+                responses = {username1: response1, username2: response2}
+                for player in [player1, player2]:
+                    conn, rfile, wfile, username = player
+                    if responses.get(username) != "yes":
+                        if rfile:
+                            try: rfile.close()
+                            except: pass
+                        if wfile:
+                            try: wfile.close()
+                            except: pass
+                        try:
+                            conn.close()
+                        except:
+                            pass
+                        active_players.pop(username, None)
+                        game_states.pop(username, None)
 
     launch_game_if_ready()
 
